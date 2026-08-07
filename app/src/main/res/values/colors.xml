@@ -1,0 +1,44 @@
+<resources>
+    <!-- Light theme -->
+    <color name="md_theme_light_primary">#000000</color>
+    <color name="md_theme_light_onPrimary">#FFFFFF</color>
+    <color name="md_theme_light_primaryContainer">#E0E0E0</color>
+    <color name="md_theme_light_onPrimaryContainer">#111111</color>
+
+    <color name="md_theme_light_secondary">#555555</color>
+    <color name="md_theme_light_onSecondary">#FFFFFF</color>
+    <color name="md_theme_light_secondaryContainer">#DDDDDD</color>
+    <color name="md_theme_light_onSecondaryContainer">#222222</color>
+
+    <color name="md_theme_light_background">#FFFFFF</color>
+    <color name="md_theme_light_onBackground">#111111</color>
+    <color name="md_theme_light_surface">#FFFFFF</color>
+    <color name="md_theme_light_onSurface">#111111</color>
+
+    <color name="md_theme_light_error">#B00020</color>
+    <color name="md_theme_light_onError">#FFFFFF</color>
+
+    <!-- Dark theme -->
+    <color name="md_theme_dark_primary">#FFFFFF</color>
+    <color name="md_theme_dark_onPrimary">#000000</color>
+    <color name="md_theme_dark_primaryContainer">#222222</color>
+    <color name="md_theme_dark_onPrimaryContainer">#FFFFFF</color>
+
+    <color name="md_theme_dark_secondary">#BBBBBB</color>
+    <color name="md_theme_dark_onSecondary">#000000</color>
+    <color name="md_theme_dark_secondaryContainer">#333333</color>
+    <color name="md_theme_dark_onSecondaryContainer">#FFFFFF</color>
+
+    <color name="md_theme_dark_background">#000000</color>
+    <color name="md_theme_dark_onBackground">#FFFFFF</color>
+    <color name="md_theme_dark_surface">#111111</color>
+    <color name="md_theme_dark_onSurface">#FFFFFF</color>
+
+    <color name="md_theme_dark_error">#FF6B6B</color>
+    <color name="md_theme_dark_onError">#000000</color>
+
+    <!-- Legacy names -->
+    <color name="colorPrimary">@color/md_theme_light_primary</color>
+    <color name="colorPrimaryDark">#000000</color>
+    <color name="colorAccent">@color/md_theme_light_secondary</color>
+</resources>

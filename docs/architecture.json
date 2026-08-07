@@ -1,0 +1,336 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "generatedAt": "2026-07-22",
+  "project": {
+    "name": "GVP",
+    "fullName": "Google Voice Pipeline",
+    "tagline": "A fully on-device voice assistant for Android — speech in, speech out, no cloud calls.",
+    "applicationId": "com.m15.gvp",
+    "namespace": "com.m15.gvp",
+    "versionName": "0.1",
+    "versionCode": 1,
+    "thesis": "A complete conversational voice loop (STT + a real LLM + TTS) running entirely on a stock Android phone, offline, today. Verified end-to-end in airplane mode on a Pixel 10 (Tensor G5).",
+    "headlineProofPoints": [
+      "Two user-switchable on-device LLM runtimes: MediaPipe/LiteRT and Gemini Nano via AICore.",
+      "Two user-switchable on-device STT engines: Sherpa-ONNX and ML Kit GenAI ASR.",
+      "622 ms time-to-first-token on the all-AICore path (Gemini Nano LLM + ML Kit GenAI STT), Pixel 10.",
+      "User-selectable LLM model catalog (Qwen 0.5B/1.5B, Phi-4-mini, Gemma) downloaded on-device.",
+      "Live partial transcripts, VAD-bracketed utterances, and speaker-mode barge-in.",
+      "Multi-turn memory with a rolling 5-exchange window; transcripts persisted locally (Room)."
+    ]
+  },
+  "architectureStyle": {
+    "pattern": "Single-Activity Jetpack Compose app",
+    "di": "Manual DI via a ServiceLocator object (no Hilt/Dagger)",
+    "state": "VoiceAgentViewModel exposing StateFlow; streaming via Kotlin Flow",
+    "concurrency": "Kotlin Coroutines + Flow",
+    "backgroundExecution": "Active listening runs in a foreground service (microphone type)",
+    "networkPolicy": "INTERNET permission used only for optional first-launch model download; never during the live pipeline"
+  },
+  "buildConfig": {
+    "compileSdk": 35,
+    "minSdk": 31,
+    "targetSdk": 35,
+    "jdk": 21,
+    "kotlin": "2.2.0",
+    "agp": "8.6.1",
+    "ksp": "2.2.0-2.0.2 (KSP1; ksp.useKSP2=false)",
+    "composeCompilerPlugin": "2.2.0",
+    "abiFilters": ["arm64-v8a"],
+    "vendoredNative": "app/libs/sherpa-onnx-1.13.2.aar (JNI .so + Kotlin API; arm64-v8a only)",
+    "supportedDevice": "arm64-v8a device on Android 12+ (API 31+)",
+    "testedDevices": [
+      "Galaxy S25 (SM-S931U1) — MediaPipe only; AICore Feature 636 returns 606-FEATURE_NOT_FOUND",
+      "Pixel 10 (Tensor G5) — AICore Gemini Nano AVAILABLE; full pipeline incl. barge-in verified"
+    ]
+  },
+  "permissions": [
+    { "name": "INTERNET", "purpose": "Optional first-launch model download only" },
+    { "name": "RECORD_AUDIO", "purpose": "Microphone capture for the pipeline" },
+    { "name": "POST_NOTIFICATIONS", "purpose": "Foreground-service notification" },
+    { "name": "FOREGROUND_SERVICE", "purpose": "Run the mic pipeline while backgrounded" },
+    { "name": "FOREGROUND_SERVICE_MICROPHONE", "purpose": "Android 14+ typed FGS for microphone" }
+  ],
+  "pipeline": {
+    "flowDiagram": "mic -> VAD -> STT -> LLM -> sanitizer -> TTS -> speaker",
+    "stages": [
+      {
+        "id": "audio",
+        "name": "Audio capture",
+        "engine": "AudioRecord (VOICE_COMMUNICATION source, hardware AEC/NS/AGC)",
+        "detail": "16 kHz mono PCM with a fixed 8x software gain stage. The Tensor G5 VOICE_COMMUNICATION chain delivers signal ~20-50x too quiet; the gain restores usable levels for the VAD and recognizer.",
+        "primaryClass": "AudioCapture",
+        "logTag": "AudioCapture"
+      },
+      {
+        "id": "vad",
+        "name": "Voice activity detection",
+        "engine": "Energy RMS gate (heuristic)",
+        "detail": "Brackets utterances (speech start/end) and provides an echo-suppression gate for barge-in. Silero VAD ONNX is the planned neural upgrade behind the same interface.",
+        "primaryClass": "SileroVad",
+        "logTag": "GVP.VAD"
+      },
+      {
+        "id": "stt",
+        "name": "Speech-to-text",
+        "engine": "Sherpa-ONNX streaming Zipformer (default) OR ML Kit GenAI ASR (AICore)",
+        "detail": "Emits live partials; Sherpa finalizes on VAD SPEECH_END, ML Kit uses its own endpointing. Input is gated while TTS plays so neither engine transcribes the assistant's echo. Selected per-session by SttRouter.",
+        "primaryClass": "SttRouter -> SherpaSttEngine | MlKitGenAiSttEngine",
+        "logTag": "GVP.STT / GVP.STT.MLKit"
+      },
+      {
+        "id": "dedupe",
+        "name": "Near-duplicate filter",
+        "engine": "Levenshtein similarity",
+        "detail": "On VAD SPEECH_END the transcript is finalized; areSimilar() drops near-duplicate finals before sending to the LLM.",
+        "primaryClass": "StringUtils.areSimilar",
+        "logTag": "GVP.Pipeline"
+      },
+      {
+        "id": "llm",
+        "name": "Language model",
+        "engine": "MediaPipe/LiteRT (primary) OR Gemini Nano via AICore OR stub",
+        "detail": "Runs system message + last 5 turns + new turn through the active engine, streaming deltas to the UI plus a final completion. Engine chosen by LlmOrchestrator honoring the PipelineMode toggle.",
+        "primaryClass": "LlmOrchestrator -> MediaPipeLlmEngine | MlKitLlmEngine | StubLlmEngine",
+        "logTag": "GVP.LLM"
+      },
+      {
+        "id": "sanitize",
+        "name": "Speech sanitizer",
+        "engine": "Text cleanup",
+        "detail": "Strips markdown, newlines, and emoji from the LLM text before it is spoken.",
+        "primaryClass": "SpeechSanitizer.sanitizeForSpeech",
+        "logTag": "GVP.Pipeline"
+      },
+      {
+        "id": "tts",
+        "name": "Text-to-speech",
+        "engine": "Android system TextToSpeech",
+        "detail": "Speaks the sanitized reply with audio focus; drives the visualizer level. System English (US) voice by default; voice is user-selectable.",
+        "primaryClass": "AndroidTtsEngine",
+        "logTag": "GVP.TTS"
+      },
+      {
+        "id": "bargein",
+        "name": "Barge-in",
+        "engine": "Energy + debounce + TTS-onset grace",
+        "detail": "If the user speaks while TTS plays, cancels the in-flight LLM and stops TTS. 150 ms debounce + ~1.2 s TTS-onset grace; VAD uses a 60 ms sustained onset (gap-bridged 400 ms).",
+        "primaryClass": "BargeInController",
+        "logTag": "GVP.BargeIn"
+      }
+    ]
+  },
+  "engines": {
+    "llm": {
+      "contract": "LlmClient (sendUserText -> Flow<Event: TextDelta|TextCompleted|Error>, cancelResponse, close)",
+      "orchestrator": "LlmOrchestrator",
+      "fallbackChain": ["MediaPipe (LiteRT)", "Gemini Nano (AICore)", "stub"],
+      "implementations": [
+        {
+          "name": "MediaPipeLlmEngine",
+          "runtime": "MediaPipe LLM Inference (LiteRT)",
+          "role": "Primary",
+          "availability": "Any supported device with the .task model downloaded",
+          "notes": "Creates a fresh LlmInferenceSession per turn and re-flattens rolling history; latency grows with prompt length (~0.8s -> ~2.0s). Planned: persistent KV-cache session.",
+          "dependency": "com.google.mediapipe:tasks-genai:0.10.27"
+        },
+        {
+          "name": "MlKitLlmEngine",
+          "runtime": "Gemini Nano via ML Kit GenAI Prompt API (AICore)",
+          "role": "Secondary",
+          "availability": "Devices with ML Kit Prompt Feature 636 provisioned (e.g. Pixel 10 Tensor G5)",
+          "notes": "606-FEATURE_NOT_FOUND on non-provisioned devices is a device state, not an app bug.",
+          "dependency": "com.google.mlkit:genai-prompt:1.0.0-beta2"
+        },
+        {
+          "name": "StubLlmEngine",
+          "runtime": "Canned responses",
+          "role": "Fallback",
+          "availability": "Always — keeps the pipeline runnable when no model is present",
+          "notes": "Wraps output in TextCompleted."
+        }
+      ],
+      "pipelineMode": {
+        "class": "PipelineMode",
+        "values": [
+          { "value": "AUTO", "behavior": "MediaPipe (if model present) -> AICore Gemini Nano -> offer download -> stub" },
+          { "value": "MEDIAPIPE", "behavior": "Only the selected LiteRT model; never AICore" },
+          { "value": "AICORE", "behavior": "Only Gemini Nano (Feature 636); unavailable if not provisioned" }
+        ]
+      },
+      "defaultSystemMessage": "You are a helpful voice assistant running entirely on-device. Keep responses concise and conversational — they will be spoken aloud via TTS. Limit responses to 1-3 sentences unless the user asks for detail. Never use bullet points, numbered lists, markdown, emojis, or special formatting. Speak in plain, natural sentences like a real conversation.",
+      "historyWindow": "Rolling 5 exchanges (system message + last 5 turns + new turn)"
+    },
+    "stt": {
+      "contract": "SttEngine (ownsMic, start, sendPcm, events -> Flow<SttEvent: UserStart|UserStop|Partial>, close)",
+      "router": "SttRouter — selects Sherpa vs ML Kit at session start from the settings toggle",
+      "implementations": [
+        {
+          "name": "SherpaSttEngine",
+          "runtime": "Sherpa-ONNX streaming OnlineRecognizer (Zipformer)",
+          "role": "Default / fallback",
+          "ownsMic": false,
+          "notes": "Fed PCM via sendPcm; VAD-gated; finalizes on VAD SPEECH_END.",
+          "dependency": "libs/sherpa-onnx-1.13.2.aar (vendored)"
+        },
+        {
+          "name": "MlKitGenAiSttEngine",
+          "runtime": "ML Kit GenAI Speech Recognition (AICore)",
+          "role": "Experimental (alpha)",
+          "ownsMic": false,
+          "notes": "Fed the same PCM via an AudioSource.fromPfd pipe so VAD/barge-in/echo-suppression keep working. Prefers Basic (on-device SODA) over Advanced (nano-v3) because Advanced contends with the Gemini Nano LLM on AICore. Toggle PREFER_ADVANCED in the engine.",
+          "dependency": "com.google.mlkit:genai-speech-recognition:1.0.0-alpha1"
+        }
+      ]
+    },
+    "tts": {
+      "contract": "TtsClient",
+      "implementation": "AndroidTtsEngine — Android TextToSpeech + audio focus",
+      "voice": "User-selectable among installed system voices; default English (US)"
+    },
+    "vad": {
+      "implementation": "SileroVad (energy RMS heuristic today; Silero VAD ONNX planned)",
+      "params": "60 ms sustained onset, 400 ms gap-bridge, tunable end-of-utterance silence and mic-sensitivity bars"
+    }
+  },
+  "llmModelCatalog": {
+    "source": "GvpLlmModel.CATALOG (LlmModelSpec entries); selected in Settings -> Language model; persisted via GvpPrefs.llmModelId",
+    "resolveOrder": ["app filesDir", "/data/local/tmp"],
+    "models": [
+      { "id": "qwen2.5-0.5b", "displayName": "Qwen2.5-0.5B-Instruct", "sizeQ8": "~0.5 GB", "authGated": false, "default": true, "notes": "Fast, lowest latency" },
+      { "id": "qwen2.5-1.5b", "displayName": "Qwen2.5-1.5B-Instruct", "sizeQ8": "~1.6 GB", "authGated": false, "default": false, "notes": "More coherent than the 0.5B" },
+      { "id": "phi-4-mini", "displayName": "Phi-4-mini-instruct", "sizeQ8": "~4 GB", "authGated": false, "default": false, "notes": "Strongest reasoning; large download / RAM-heavy" },
+      { "id": "gemma3-1b", "displayName": "Gemma3-1B-IT", "sizeQ8": "~1 GB", "authGated": true, "default": false, "notes": "Google open-weight; needs a Hugging Face read token (Bearer to huggingface.co only)" }
+    ]
+  },
+  "sttModelCatalog": {
+    "source": "SttModel (URL + file-name constants)",
+    "default": {
+      "name": "Streaming Zipformer EN 2023-06-26 (int8)",
+      "size": "~73 MB",
+      "repo": "csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26",
+      "files": [
+        "encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+        "decoder-epoch-99-avg-1-chunk-16-left-128.onnx",
+        "joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx",
+        "tokens.txt"
+      ]
+    },
+    "note": "Both STT models name their vocab tokens.txt — delete the old one when switching."
+  },
+  "modules": [
+    { "package": "com.m15.gvp", "file": "App.kt", "role": "Application subclass; initializes ServiceLocator" },
+    { "package": "com.m15.gvp", "file": "MainActivity.kt", "role": "Compose host + NavHost (setup / prompt / voice / settings)" },
+    { "package": "com.m15.gvp", "file": "VoiceAgentViewModel.kt", "role": "Pipeline orchestration, UI state (StateFlow), model warm-up, latency, speakerphone/barge-in glue", "lines": 571 },
+    { "package": "com.m15.gvp", "file": "BargeInController.kt", "role": "Interrupt TTS when the user speaks (debounce + TTS-onset grace)" },
+    { "package": "com.m15.gvp", "file": "CustomPromptScreen.kt", "role": "Text-prompt (non-voice) entry screen" },
+    { "package": "com.m15.gvp.di", "file": "ServiceLocator.kt", "role": "Manual dependency wiring (repo, prefs, vad, stt, llm, tts, audio, barge)" },
+    { "package": "com.m15.gvp.audio", "file": "AudioCapture.kt", "role": "AudioRecord (VOICE_COMMUNICATION, AEC/NS/AGC), 16 kHz mono + 8x gain" },
+    { "package": "com.m15.gvp.audio", "file": "SileroVad.kt", "role": "Energy VAD: speech start/end + echo-suppression gate for barge-in" },
+    { "package": "com.m15.gvp.stt", "file": "SttEngine.kt", "role": "STT contract (start/sendPcm/events/close + ownsMic) and SttEvent sealed interface" },
+    { "package": "com.m15.gvp.stt", "file": "SttRouter.kt", "role": "Selects Sherpa vs ML Kit at session start (settings toggle)" },
+    { "package": "com.m15.gvp.stt", "file": "SherpaSttEngine.kt", "role": "Streaming ASR; VAD-gated; finalizes on VAD SPEECH_END", "lines": 224 },
+    { "package": "com.m15.gvp.stt", "file": "MlKitGenAiSttEngine.kt", "role": "ML Kit GenAI ASR (AICore) via fromPfd pipe; Advanced->Basic fallback", "lines": 243 },
+    { "package": "com.m15.gvp.stt", "file": "SttModel.kt", "role": "Model files / URLs / resolve + download" },
+    { "package": "com.m15.gvp.stt", "file": "SttStatus.kt", "role": "STT status enum" },
+    { "package": "com.m15.gvp.llm", "file": "LlmClient.kt", "role": "LLM contract + Event types + DEFAULT_SYSTEM_MESSAGE" },
+    { "package": "com.m15.gvp.llm", "file": "LlmOrchestrator.kt", "role": "Engine selection (honors PipelineMode), status, active model name, download", "lines": 194 },
+    { "package": "com.m15.gvp.llm", "file": "MediaPipeLlmEngine.kt", "role": "LiteRT LlmInference (streaming) — primary", "lines": 213 },
+    { "package": "com.m15.gvp.llm", "file": "MlKitLlmEngine.kt", "role": "Gemini Nano via ML Kit GenAI Prompt API (AICore) — secondary", "lines": 136 },
+    { "package": "com.m15.gvp.llm", "file": "StubLlmEngine.kt", "role": "Canned fallback" },
+    { "package": "com.m15.gvp.llm", "file": "PipelineMode.kt", "role": "User-selectable pipeline: AUTO / MEDIAPIPE / AICORE" },
+    { "package": "com.m15.gvp.llm", "file": "GvpLlmModel.kt", "role": "LiteRT model catalog (LlmModelSpec + CATALOG)" },
+    { "package": "com.m15.gvp.llm", "file": "ModelDownloader.kt", "role": "Atomic HTTP download (.part + rename) with progress (shared by STT)" },
+    { "package": "com.m15.gvp.llm", "file": "PromptBuilder.kt", "role": "Flatten system msg + history into a single prompt" },
+    { "package": "com.m15.gvp.llm", "file": "LlmStatus.kt", "role": "LLM status enum (CHECKING/READY/NEEDS_DOWNLOAD/DOWNLOADING/UNAVAILABLE)" },
+    { "package": "com.m15.gvp.tts", "file": "AndroidTtsEngine.kt", "role": "Android TextToSpeech + audio focus", "lines": 235 },
+    { "package": "com.m15.gvp.tts", "file": "TtsClient.kt", "role": "TTS contract" },
+    { "package": "com.m15.gvp.settings", "file": "GvpPrefs.kt", "role": "DataStore: theme, system msg, VAD/barge-in thresholds, TTS voice, model ids, STT toggle" },
+    { "package": "com.m15.gvp.util", "file": "SpeechSanitizer.kt", "role": "Strip markdown/newlines/emoji from LLM text before TTS" },
+    { "package": "com.m15.gvp.util", "file": "StringUtils.kt", "role": "areSimilar() — Levenshtein near-duplicate filter" },
+    { "package": "com.m15.gvp.util", "file": "LatencyTracker.kt", "role": "Time-to-first-token measurement" },
+    { "package": "com.m15.gvp.util", "file": "LlmStop.kt", "role": "LLM stop/cancel signaling helper" },
+    { "package": "com.m15.gvp.data.db", "file": "AppDatabase.kt", "role": "Room database (singleton get())" },
+    { "package": "com.m15.gvp.data.db", "file": "Entities.kt", "role": "Room entities: ChatSession, MessageItem, TranscriptChunk" },
+    { "package": "com.m15.gvp.data.db.dao", "file": "SessionDao.kt", "role": "Session DAO" },
+    { "package": "com.m15.gvp.data.db.dao", "file": "MessageDao.kt", "role": "Message DAO" },
+    { "package": "com.m15.gvp.data.db.dao", "file": "TranscriptDao.kt", "role": "Transcript-chunk DAO" },
+    { "package": "com.m15.gvp.data.repo", "file": "ConversationRepository.kt", "role": "Sessions + messages persistence facade" },
+    { "package": "com.m15.gvp.data.model", "file": "Models.kt", "role": "Domain models" },
+    { "package": "com.m15.gvp.service", "file": "VoiceAgentService.kt", "role": "Foreground service (microphone) during active sessions" },
+    { "package": "com.m15.gvp.ui", "file": "SetupScreen.kt", "role": "LLM/STT provisioning cards, download progress, AICore status" },
+    { "package": "com.m15.gvp.ui", "file": "VoiceAgentScreen.kt", "role": "Live voice UI: partials, chips, speaker FAB" },
+    { "package": "com.m15.gvp.ui", "file": "SettingsScreen.kt", "role": "All settings (theme, pipeline, model, STT, HF token, thresholds)", "lines": 540 },
+    { "package": "com.m15.gvp.ui", "file": "AudioBlobVisualizer.kt", "role": "Audio-level blob visualizer" },
+    { "package": "com.m15.gvp.ui.theme", "file": "Theme.kt / Color.kt / Type.kt", "role": "Compose Material 3 theme" }
+  ],
+  "dataLayer": {
+    "database": "Room (KSP), schema exported to app/schemas",
+    "entities": [
+      { "name": "ChatSession", "primaryKey": "id: String", "fields": ["title: String", "createdAt: Long"] },
+      { "name": "MessageItem", "primaryKey": "messageId: String", "fields": ["sessionId: String", "role: String", "text: String", "createdAt: Long"] },
+      { "name": "TranscriptChunk", "primaryKey": "id: String", "fields": ["sessionId: String", "fromMs: Long", "toMs: Long", "text: String", "isFinal: Boolean"] }
+    ],
+    "daos": ["SessionDao", "MessageDao", "TranscriptDao"],
+    "repository": "ConversationRepository",
+    "preferences": "GvpPrefs (DataStore Preferences)"
+  },
+  "settings": [
+    { "name": "Theme", "notes": "System / Light / Dark" },
+    { "name": "Inference pipeline", "notes": "Auto / MediaPipe / AICore; shows active-engine status" },
+    { "name": "Language model", "notes": "Pick the LiteRT model (Qwen 0.5B/1.5B, Phi-4-mini, Gemma); shows size + download state; disabled under AICore" },
+    { "name": "ML Kit GenAI STT", "notes": "Experimental — swap Sherpa-ONNX for ML Kit GenAI ASR; applies next session" },
+    { "name": "Hugging Face token", "notes": "Appears for gated models (Gemma); authorizes the download" },
+    { "name": "System message", "notes": "Persisted prompt prefix" },
+    { "name": "TTS mute", "notes": "Transcript-only mode" },
+    { "name": "TTS voice", "notes": "Pick among installed system voices" },
+    { "name": "End-of-utterance silence", "notes": "VAD silence threshold -> STT finalization timing" },
+    { "name": "Mic sensitivity", "notes": "Idle voiced-energy bar (raise if ambient noise self-triggers)" },
+    { "name": "Barge-in threshold", "notes": "Bar applied during TTS, between AEC residual echo and the user's voice (clamped to slider range)" }
+  ],
+  "logging": {
+    "tags": ["GVP.Pipeline", "GVP.VAD", "GVP.STT", "GVP.STT.MLKit", "GVP.LLM", "GVP.TTS", "GVP.BargeIn", "AudioCapture"],
+    "command": "adb logcat -s GVP.Pipeline GVP.VAD GVP.STT GVP.STT.MLKit GVP.LLM GVP.TTS GVP.BargeIn"
+  },
+  "hardProblems": [
+    {
+      "title": "Device-specific audio capture",
+      "problem": "The Pixel 10's VOICE_COMMUNICATION + AEC/NS/AGC chain delivered signal ~20-50x too quiet (loud speech peaked ~0.013 RMS vs the 0.027 VAD bar) — no transcripts at all.",
+      "fix": "An 8x software gain stage in AudioCapture.",
+      "takeaway": "On-device audio is not uniform across handsets; the gain is a per-device constant."
+    },
+    {
+      "title": "AICore contention",
+      "problem": "Running ML Kit GenAI Advanced ASR and Gemini Nano simultaneously both hit AICore and starve each other (Nano slowed ~2s -> >6s, replies cancelled).",
+      "fix": "Prefer Basic (SODA) STT; keep the LLM off AICore when using Advanced ASR (PREFER_ADVANCED = false).",
+      "takeaway": "The on-device accelerator is a shared, finite resource — you schedule around it."
+    },
+    {
+      "title": "Turn-taking is the frontier",
+      "problem": "Today's VAD and barge-in are energy heuristics, not a model.",
+      "fix": "Roadmap: a fully-on-device, Deepgram-Flux-style neural turn model.",
+      "takeaway": "Neural VAD -> eager endpointing -> semantic end-of-turn is the path."
+    }
+  ],
+  "roadmap": [
+    { "priority": 1, "item": "Neural VAD", "detail": "Replace the energy SileroVad with real Silero VAD ONNX (~2 MB, bundled with Sherpa) behind the same interface." },
+    { "priority": 2, "item": "Eager end-of-turn event model", "detail": "Flux-style eager -> resume -> commit; start the LLM on a medium-confidence endpoint and cancel on resume. Retract plumbing already exists." },
+    { "priority": 3, "item": "Semantic end-of-turn", "detail": "Run an on-device turn model (e.g. Smart Turn v2/v3, Wav2Vec2-based) at candidate endpoints instead of the fixed 1.5 s silence timer." },
+    { "priority": 4, "item": "Reference-based AEC", "detail": "Feed the TTS PCM as the echo reference (e.g. WebRTC AEC3) for robust speakerphone barge-in on devices with worse hardware AEC." },
+    { "priority": 5, "item": "Adaptive noise-floor threshold", "detail": "Track the noise floor so capture gain and barge-in bar stop needing per-device constants." },
+    { "priority": 6, "item": "Persistent KV-cache LLM session", "detail": "Keep a persistent MediaPipe session that retains the KV cache and feeds only the new user turn, flattening latency regardless of conversation depth." }
+  ],
+  "techStack": {
+    "language": "Kotlin",
+    "ui": "Jetpack Compose (Material 3)",
+    "async": "Coroutines / Flow",
+    "persistence": ["Room (KSP)", "DataStore Preferences"],
+    "navigation": "Navigation Compose",
+    "onDeviceLibraries": [
+      "MediaPipe LLM Inference (LiteRT) — tasks-genai:0.10.27",
+      "ML Kit GenAI Prompt — genai-prompt:1.0.0-beta2",
+      "ML Kit GenAI Speech Recognition — genai-speech-recognition:1.0.0-alpha1",
+      "Sherpa-ONNX 1.13.2 (vendored AAR)"
+    ]
+  }
+}

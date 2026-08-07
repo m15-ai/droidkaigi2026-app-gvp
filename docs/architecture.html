@@ -1,0 +1,661 @@
+<title>GVP — Architecture</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    color-scheme: light dark;
+    /* neutrals — cool blue bias */
+    --bg:        #f4f6f9;
+    --panel:     #ffffff;
+    --panel-2:   #eef1f6;
+    --ink:       #131a26;
+    --ink-soft:  #45505f;
+    --ink-faint: #6a7686;
+    --line:      #dbe1ea;
+    --line-2:    #c9d1dd;
+    /* signal accent */
+    --signal:    #0f8f80;
+    --signal-ink:#0b6b5f;
+    /* stage hues */
+    --s-audio:  #6b7684;
+    --s-vad:    #c0791f;
+    --s-stt:    #1288a8;
+    --s-llm:    #6d4bd0;
+    --s-tts:    #c0426b;
+    --s-guard:  #b1471f;
+    /* semantic */
+    --warn:     #b1471f;
+    --warn-bg:  #fbeee6;
+    --mono: ui-monospace, "Cascadia Code", "JetBrains Mono", "SF Mono", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:        #0c1119;
+      --panel:     #131b26;
+      --panel-2:   #0f1620;
+      --ink:       #e6ecf4;
+      --ink-soft:  #a7b3c3;
+      --ink-faint: #6f7d90;
+      --line:      #22303f;
+      --line-2:    #2c3c4e;
+      --signal:    #33c9b7;
+      --signal-ink:#7fe6d9;
+      --s-audio:  #9aa6b5;
+      --s-vad:    #e0a458;
+      --s-stt:    #4cc1de;
+      --s-llm:    #a58cf0;
+      --s-tts:    #ef7ba0;
+      --s-guard:  #e08359;
+      --warn:     #e08359;
+      --warn-bg:  #241812;
+    }
+  }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg:#f4f6f9;--panel:#fff;--panel-2:#eef1f6;--ink:#131a26;--ink-soft:#45505f;--ink-faint:#6a7686;
+    --line:#dbe1ea;--line-2:#c9d1dd;--signal:#0f8f80;--signal-ink:#0b6b5f;
+    --s-audio:#6b7684;--s-vad:#c0791f;--s-stt:#1288a8;--s-llm:#6d4bd0;--s-tts:#c0426b;--s-guard:#b1471f;
+    --warn:#b1471f;--warn-bg:#fbeee6;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg:#0c1119;--panel:#131b26;--panel-2:#0f1620;--ink:#e6ecf4;--ink-soft:#a7b3c3;--ink-faint:#6f7d90;
+    --line:#22303f;--line-2:#2c3c4e;--signal:#33c9b7;--signal-ink:#7fe6d9;
+    --s-audio:#9aa6b5;--s-vad:#e0a458;--s-stt:#4cc1de;--s-llm:#a58cf0;--s-tts:#ef7ba0;--s-guard:#e08359;
+    --warn:#e08359;--warn-bg:#241812;
+  }
+
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { animation: none !important; transition: none !important; } }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font-family: var(--sans); line-height: 1.6;
+    font-size: 16px; -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--signal-ink); }
+
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+
+  /* ---------- top bar ---------- */
+  .topbar {
+    position: sticky; top: 0; z-index: 40;
+    background: color-mix(in srgb, var(--bg) 88%, transparent);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar .wrap { display: flex; align-items: center; gap: 16px; height: 56px; }
+  .brand { font-family: var(--mono); font-weight: 700; letter-spacing: .04em; font-size: 15px; }
+  .brand b { color: var(--signal-ink); }
+  .brand span { color: var(--ink-faint); font-weight: 500; }
+  .topnav { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
+  .topnav a {
+    font-family: var(--mono); font-size: 12px; text-decoration: none;
+    color: var(--ink-soft); padding: 5px 9px; border-radius: 6px;
+  }
+  .topnav a:hover { background: var(--panel-2); color: var(--ink); }
+  .themetoggle {
+    font-family: var(--mono); font-size: 12px; cursor: pointer;
+    background: var(--panel); border: 1px solid var(--line-2); color: var(--ink-soft);
+    padding: 5px 10px; border-radius: 6px;
+  }
+  .themetoggle:hover { border-color: var(--signal); color: var(--ink); }
+
+  /* ---------- hero ---------- */
+  .hero { padding: 64px 0 40px; border-bottom: 1px solid var(--line); }
+  .eyebrow {
+    font-family: var(--mono); font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+    color: var(--signal-ink); display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+  }
+  .eyebrow::before { content:""; width: 26px; height: 1px; background: var(--signal); }
+  h1 { font-size: clamp(2.4rem, 6vw, 4rem); line-height: 1.02; margin: 0 0 18px; letter-spacing: -.02em; text-wrap: balance; }
+  h1 .g { color: var(--ink-faint); font-weight: 400; }
+  .lede { font-size: 1.2rem; color: var(--ink-soft); max-width: 62ch; margin: 0 0 28px; text-wrap: pretty; }
+  .badges { display: flex; flex-wrap: wrap; gap: 8px; }
+  .badge {
+    font-family: var(--mono); font-size: 12px; padding: 5px 11px; border-radius: 999px;
+    background: var(--panel); border: 1px solid var(--line-2); color: var(--ink-soft);
+  }
+  .badge b { color: var(--ink); font-weight: 600; }
+
+  /* ---------- pipeline diagram ---------- */
+  .pipe-section { padding: 44px 0; }
+  .pipe-scroll { overflow-x: auto; padding: 6px 2px 14px; }
+  .pipe {
+    display: flex; align-items: stretch; gap: 0; min-width: 720px;
+  }
+  .stage {
+    position: relative; flex: 1; min-width: 96px;
+    background: var(--panel); border: 1px solid var(--line-2);
+    border-top: 3px solid var(--sc); border-radius: 10px;
+    padding: 14px 12px; text-decoration: none; color: inherit;
+    transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .stage:not(:last-child) { margin-right: 26px; }
+  .stage:not(:last-child)::after {
+    content: "▸"; position: absolute; right: -22px; top: 50%; transform: translateY(-50%);
+    color: var(--line-2); font-size: 16px;
+  }
+  .stage:hover { transform: translateY(-3px); box-shadow: 0 8px 22px -12px rgba(0,0,0,.35); border-color: var(--sc); }
+  .stage .k { font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--sc); font-weight: 700; }
+  .stage .n { font-size: 14px; font-weight: 650; margin: 6px 0 3px; }
+  .stage .c { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); word-break: break-word; }
+
+  /* ---------- generic section ---------- */
+  section { padding: 52px 0; border-top: 1px solid var(--line); }
+  .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+  .sec-num { font-family: var(--mono); font-size: 13px; color: var(--signal-ink); font-weight: 700; }
+  h2 { font-size: 1.7rem; margin: 0; letter-spacing: -.01em; }
+  .sec-sub { color: var(--ink-soft); max-width: 64ch; margin: 8px 0 30px; }
+
+  /* ---------- cards grid ---------- */
+  .grid { display: grid; gap: 16px; }
+  .g2 { grid-template-columns: repeat(2, 1fr); }
+  .g3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 860px) { .g2, .g3 { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 20px 22px;
+  }
+  .card h3 { margin: 0 0 4px; font-size: 1.05rem; }
+  .card .role { font-family: var(--mono); font-size: 11px; color: var(--ink-faint); text-transform: uppercase; letter-spacing: .08em; }
+  .card p { margin: 10px 0 0; color: var(--ink-soft); font-size: .94rem; }
+  .tag {
+    display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 5px;
+    background: var(--panel-2); color: var(--ink-soft); margin-top: 12px;
+  }
+  .tag.primary { background: color-mix(in srgb, var(--signal) 18%, transparent); color: var(--signal-ink); }
+
+  /* ---------- engine tiers ---------- */
+  .tier { display: flex; gap: 16px; align-items: flex-start; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; }
+  .tier + .tier { margin-top: 12px; }
+  .tier-rank {
+    flex: none; width: 38px; height: 38px; border-radius: 9px; display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 700; font-size: 14px;
+    background: var(--panel-2); color: var(--ink-soft); border: 1px solid var(--line-2);
+  }
+  .tier.primary .tier-rank { background: color-mix(in srgb, var(--signal) 20%, transparent); color: var(--signal-ink); border-color: var(--signal); }
+  .tier-body { flex: 1; min-width: 0; }
+  .tier-body h4 { margin: 0 0 2px; font-size: 1.02rem; }
+  .tier-body .rt { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); }
+  .tier-body p { margin: 8px 0 0; font-size: .92rem; color: var(--ink-soft); }
+  .pill { font-family: var(--mono); font-size: 10.5px; padding: 3px 8px; border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; border: 1px solid var(--line-2); color: var(--ink-soft); white-space: nowrap; }
+  .pill.ok { color: var(--signal-ink); border-color: var(--signal); }
+
+  /* ---------- table ---------- */
+  .tbl-scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 12px; }
+  table { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .92rem; }
+  th, td { text-align: left; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+  th { font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); background: var(--panel-2); }
+  tr:last-child td { border-bottom: 0; }
+  td.mono, .mono-cell { font-family: var(--mono); font-size: 12.5px; }
+  td b { color: var(--ink); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); }
+  .yn-yes { color: var(--warn); font-weight: 600; }
+  .yn-no { color: var(--ink-faint); }
+  .row-default td { background: color-mix(in srgb, var(--signal) 8%, transparent); }
+
+  /* ---------- module map ---------- */
+  .pkg { margin-top: 22px; }
+  .pkg-name { font-family: var(--mono); font-size: 13px; color: var(--signal-ink); font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+  .pkg-name::after { content:""; flex:1; height:1px; background: var(--line); }
+  .files { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 8px; }
+  .file {
+    display: flex; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel);
+    align-items: baseline;
+  }
+  .file .fn { font-family: var(--mono); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+  .file .fr { font-size: 12px; color: var(--ink-soft); line-height: 1.4; }
+  .file .ln { margin-left: auto; font-family: var(--mono); font-size: 10.5px; color: var(--ink-faint); flex: none; }
+
+  /* ---------- learned / callouts ---------- */
+  .learn { border: 1px solid var(--line); border-left: 3px solid var(--warn); border-radius: 10px; background: var(--panel); padding: 18px 20px; }
+  .learn + .learn { margin-top: 14px; }
+  .learn h4 { margin: 0 0 8px; font-size: 1.05rem; }
+  .learn dl { margin: 0; display: grid; grid-template-columns: 84px 1fr; gap: 6px 14px; font-size: .92rem; }
+  .learn dt { font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-faint); padding-top: 2px; }
+  .learn dd { margin: 0; color: var(--ink-soft); }
+  .learn dd.take { color: var(--ink); }
+
+  /* ---------- roadmap ---------- */
+  .road { position: relative; padding-left: 26px; }
+  .road::before { content:""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--line); }
+  .step { position: relative; padding: 0 0 20px; }
+  .step:last-child { padding-bottom: 0; }
+  .step::before {
+    content:""; position: absolute; left: -23px; top: 5px; width: 12px; height: 12px; border-radius: 999px;
+    background: var(--panel); border: 2px solid var(--signal);
+  }
+  .step h4 { margin: 0; font-size: 1rem; }
+  .step h4 .p { font-family: var(--mono); font-size: 12px; color: var(--ink-faint); margin-right: 8px; }
+  .step p { margin: 4px 0 0; color: var(--ink-soft); font-size: .92rem; }
+
+  /* ---------- code / logcat ---------- */
+  .code {
+    font-family: var(--mono); font-size: 12.5px; background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; overflow-x: auto; color: var(--ink-soft);
+    white-space: pre; line-height: 1.7;
+  }
+  .code .t { color: var(--signal-ink); }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { font-family: var(--mono); font-size: 12px; padding: 5px 10px; border-radius: 7px; background: var(--panel); border: 1px solid var(--line-2); color: var(--ink-soft); }
+
+  footer { border-top: 1px solid var(--line); padding: 36px 0 60px; color: var(--ink-faint); font-size: .86rem; }
+  footer .wrap { display: flex; justify-content: space-between; gap: 16px; flex-wrap: wrap; align-items: center; }
+  footer .mono { font-family: var(--mono); }
+</style>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand"><b>GVP</b> <span>// architecture</span></div>
+    <nav class="topnav">
+      <a href="#pipeline">pipeline</a>
+      <a href="#engines">engines</a>
+      <a href="#models">models</a>
+      <a href="#modules">modules</a>
+      <a href="#data">data</a>
+      <a href="#learned">learned</a>
+      <a href="#roadmap">roadmap</a>
+    </nav>
+    <button class="themetoggle" id="themeBtn" aria-label="Toggle color theme">◐ theme</button>
+  </div>
+</div>
+
+<header class="hero">
+  <div class="wrap">
+    <div class="eyebrow">On-device voice assistant · Android</div>
+    <h1>Google Voice Pipeline <span class="g">— speech in, speech out, no cloud.</span></h1>
+    <p class="lede">
+      You speak; your voice is transcribed, answered by an on-device LLM, and spoken back — every stage runs
+      on the phone's own CPU/NPU. Once the models are downloaded it works in airplane mode. Verified
+      end-to-end on a Pixel 10 (Tensor G5).
+    </p>
+    <div class="badges">
+      <span class="badge"><b>com.m15.gvp</b> · v0.1</span>
+      <span class="badge">Kotlin · <b>Compose</b></span>
+      <span class="badge">minSdk <b>31</b> · arm64-v8a</span>
+      <span class="badge"><b>622 ms</b> TTFT · all-AICore path</span>
+      <span class="badge">2 LLM runtimes · <b>2 STT engines</b></span>
+    </div>
+  </div>
+</header>
+
+<!-- ========================= PIPELINE ========================= -->
+<section id="pipeline" style="border-top:none;">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">01</span><h2>The pipeline</h2></div>
+    <p class="sec-sub">
+      A single conversational loop. The microphone streams PCM; each stage hands off to the next; a
+      near-duplicate filter and a speech sanitizer sit between the model boundaries. Barge-in listens
+      the whole time. Hover a stage to see the class that owns it.
+    </p>
+    <div class="pipe-scroll">
+      <div class="pipe">
+        <a class="stage" href="#modules" style="--sc:var(--s-audio)"><div class="k">Capture</div><div class="n">Microphone</div><div class="c">AudioCapture · 16 kHz + 8× gain</div></a>
+        <a class="stage" href="#modules" style="--sc:var(--s-vad)"><div class="k">Gate</div><div class="n">VAD</div><div class="c">SileroVad · energy RMS</div></a>
+        <a class="stage" href="#engines" style="--sc:var(--s-stt)"><div class="k">Transcribe</div><div class="n">STT</div><div class="c">Sherpa-ONNX / ML Kit</div></a>
+        <a class="stage" href="#engines" style="--sc:var(--s-llm)"><div class="k">Reason</div><div class="n">LLM</div><div class="c">LiteRT / Gemini Nano</div></a>
+        <a class="stage" href="#modules" style="--sc:var(--s-guard)"><div class="k">Clean</div><div class="n">Sanitizer</div><div class="c">strip md · emoji · newlines</div></a>
+        <a class="stage" href="#engines" style="--sc:var(--s-tts)"><div class="k">Speak</div><div class="n">TTS</div><div class="c">Android TextToSpeech</div></a>
+      </div>
+    </div>
+    <div class="grid g3" style="margin-top:24px">
+      <div class="card">
+        <span class="role">Turn-taking</span>
+        <h3>Barge-in</h3>
+        <p><span class="mono-cell">BargeInController</span> cancels the in-flight LLM and stops TTS when the user speaks over the assistant — 150 ms debounce plus a ~1.2 s TTS-onset grace to reject the assistant's own echo.</p>
+      </div>
+      <div class="card">
+        <span class="role">Memory</span>
+        <h3>Rolling context</h3>
+        <p>Each turn sends the system message plus the last <b>5 exchanges</b> plus the new turn. Transcripts and messages are persisted locally in Room.</p>
+      </div>
+      <div class="card">
+        <span class="role">Echo control</span>
+        <h3>Input gating</h3>
+        <p>STT input is gated while TTS plays so neither recognizer transcribes the assistant's own voice. A 400 ms hangover covers the echo tail after speech ends.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= ENGINES ========================= -->
+<section id="engines">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">02</span><h2>Swappable engines</h2></div>
+    <p class="sec-sub">
+      Every model boundary is an interface with more than one implementation, chosen at runtime. The LLM
+      resolves down a three-tier fallback chain; STT routes between two engines per session. The pipeline
+      always runs — worst case, on the stub.
+    </p>
+
+    <h3 style="font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--s-llm);margin:0 0 14px">LLM · LlmOrchestrator → fallback chain</h3>
+    <div class="tier primary">
+      <div class="tier-rank">1</div>
+      <div class="tier-body">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap">
+          <h4>MediaPipeLlmEngine</h4><span class="pill ok">primary · any device</span>
+        </div>
+        <div class="rt">MediaPipe LLM Inference (LiteRT) · tasks-genai:0.10.27</div>
+        <p>Runs downloaded <span class="mono-cell">.task</span> models (Qwen / Phi / Gemma) directly — the same runtime as Google's AI Edge Gallery. A fresh session per turn re-prefills history today; a persistent KV-cache session is on the roadmap.</p>
+      </div>
+    </div>
+    <div class="tier">
+      <div class="tier-rank">2</div>
+      <div class="tier-body">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap">
+          <h4>MlKitLlmEngine</h4><span class="pill">secondary · AICore</span>
+        </div>
+        <div class="rt">Gemini Nano via ML Kit GenAI Prompt · genai-prompt:1.0.0-beta2</div>
+        <p>Used only where ML Kit Prompt <b>Feature 636</b> is provisioned (e.g. Pixel 10 Tensor G5). <span class="mono-cell">606-FEATURE_NOT_FOUND</span> elsewhere is a device-provisioning state, not an app bug.</p>
+      </div>
+    </div>
+    <div class="tier">
+      <div class="tier-rank">3</div>
+      <div class="tier-body">
+        <div style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;flex-wrap:wrap">
+          <h4>StubLlmEngine</h4><span class="pill">fallback · always</span>
+        </div>
+        <div class="rt">Canned responses</div>
+        <p>Keeps the pipeline runnable when no model is present. Wraps its output in <span class="mono-cell">TextCompleted</span> so the ViewModel's collection logic is unchanged.</p>
+      </div>
+    </div>
+
+    <div class="grid g2" style="margin-top:20px">
+      <div class="card">
+        <span class="role">User override</span>
+        <h3>PipelineMode</h3>
+        <p><b>AUTO</b> — MediaPipe (if downloaded) → AICore → offer download → stub.<br>
+           <b>MEDIAPIPE</b> — only the selected LiteRT model, never AICore.<br>
+           <b>AICORE</b> — only Gemini Nano; unavailable if Feature 636 isn't provisioned.</p>
+      </div>
+      <div class="card">
+        <span class="role">STT · SttRouter</span>
+        <h3>Two recognizers</h3>
+        <p><b>SherpaSttEngine</b> (default) — streaming Zipformer, VAD-gated, finalizes on <span class="mono-cell">SPEECH_END</span>.<br>
+           <b>MlKitGenAiSttEngine</b> (experimental) — ML Kit GenAI ASR on AICore, fed the same PCM via an <span class="mono-cell">fromPfd</span> pipe. Prefers Basic (SODA) over Advanced to avoid contending with Gemini Nano.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= MODELS ========================= -->
+<section id="models">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">03</span><h2>Model catalog</h2></div>
+    <p class="sec-sub">
+      Models aren't bundled — they download on-device (or via <span class="mono-cell">adb push</span> to
+      <span class="mono-cell">/data/local/tmp</span>). The LLM is user-selectable in Settings; the choice
+      persists in DataStore. Gated models need a Hugging Face token, sent as a Bearer header to
+      <span class="mono-cell">huggingface.co</span> only.
+    </p>
+
+    <h3 style="font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--s-llm);margin:0 0 12px">LLM catalog · GvpLlmModel.CATALOG</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Model</th><th class="num">Size (q8)</th><th>Gated</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr class="row-default"><td class="mono"><b>Qwen2.5-0.5B-Instruct</b></td><td class="num">~0.5 GB</td><td class="yn-no">no</td><td>Default — fast, lowest latency</td></tr>
+          <tr><td class="mono">Qwen2.5-1.5B-Instruct</td><td class="num">~1.6 GB</td><td class="yn-no">no</td><td>More coherent than the 0.5B</td></tr>
+          <tr><td class="mono">Phi-4-mini-instruct</td><td class="num">~4 GB</td><td class="yn-no">no</td><td>Strongest reasoning; large / RAM-heavy</td></tr>
+          <tr><td class="mono">Gemma3-1B-IT</td><td class="num">~1 GB</td><td class="yn-yes">yes</td><td>Google open-weight; needs a HF read token</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--s-stt);margin:26px 0 12px">STT default · SttModel</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Model</th><th class="num">Size</th><th>Files</th></tr></thead>
+        <tbody>
+          <tr><td class="mono"><b>Streaming Zipformer EN 2023-06-26</b> (int8)</td><td class="num">~73 MB</td><td class="mono-cell">encoder · decoder · joiner · tokens.txt</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="sec-sub" style="margin-top:14px">Resolve order for any model file: app <span class="mono-cell">filesDir</span> → <span class="mono-cell">/data/local/tmp</span>. <span class="mono-cell">ModelDownloader</span> does atomic downloads (<span class="mono-cell">.part</span> + rename) with progress, shared by both LLM and STT.</p>
+  </div>
+</section>
+
+<!-- ========================= MODULES ========================= -->
+<section id="modules">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">04</span><h2>Module map</h2></div>
+    <p class="sec-sub">
+      Single-Activity Compose app. Manual DI via <span class="mono-cell">ServiceLocator</span>; state in
+      <span class="mono-cell">VoiceAgentViewModel</span> (StateFlow); streaming via Kotlin Flow. ~5,000 lines
+      of Kotlin across these packages.
+    </p>
+
+    <div class="pkg">
+      <div class="pkg-name">com.m15.gvp — app shell</div>
+      <div class="files">
+        <div class="file"><div><div class="fn">MainActivity.kt</div><div class="fr">Compose host + NavHost (setup / prompt / voice / settings)</div></div><span class="ln">128</span></div>
+        <div class="file"><div><div class="fn">VoiceAgentViewModel.kt</div><div class="fr">Pipeline orchestration, UI state, model warm-up, latency</div></div><span class="ln">571</span></div>
+        <div class="file"><div><div class="fn">BargeInController.kt</div><div class="fr">Interrupt TTS when the user speaks (debounce + grace)</div></div><span class="ln">82</span></div>
+        <div class="file"><div><div class="fn">App.kt</div><div class="fr">Application subclass; boots the ServiceLocator</div></div><span class="ln">11</span></div>
+        <div class="file"><div><div class="fn">CustomPromptScreen.kt</div><div class="fr">Text-prompt (non-voice) entry screen</div></div><span class="ln">116</span></div>
+      </div>
+    </div>
+
+    <div class="pkg">
+      <div class="pkg-name">audio · di</div>
+      <div class="files">
+        <div class="file"><div><div class="fn">audio/AudioCapture.kt</div><div class="fr">AudioRecord (VOICE_COMMUNICATION, AEC/NS/AGC) + 8× gain</div></div><span class="ln">121</span></div>
+        <div class="file"><div><div class="fn">audio/SileroVad.kt</div><div class="fr">Energy VAD: speech start/end + echo-suppression gate</div></div><span class="ln">123</span></div>
+        <div class="file"><div><div class="fn">di/ServiceLocator.kt</div><div class="fr">Manual dependency wiring — no Hilt/Dagger</div></div><span class="ln">65</span></div>
+      </div>
+    </div>
+
+    <div class="pkg">
+      <div class="pkg-name">stt — speech-to-text</div>
+      <div class="files">
+        <div class="file"><div><div class="fn">SttEngine.kt</div><div class="fr">Contract + SttEvent (UserStart / UserStop / Partial)</div></div><span class="ln">40</span></div>
+        <div class="file"><div><div class="fn">SttRouter.kt</div><div class="fr">Selects Sherpa ⇄ ML Kit at session start</div></div><span class="ln">38</span></div>
+        <div class="file"><div><div class="fn">SherpaSttEngine.kt</div><div class="fr">Streaming ASR; VAD-gated; finalize on SPEECH_END</div></div><span class="ln">224</span></div>
+        <div class="file"><div><div class="fn">MlKitGenAiSttEngine.kt</div><div class="fr">ML Kit GenAI ASR (AICore) via fromPfd pipe</div></div><span class="ln">243</span></div>
+        <div class="file"><div><div class="fn">SttModel.kt</div><div class="fr">Model files / URLs / resolve + download</div></div><span class="ln">122</span></div>
+        <div class="file"><div><div class="fn">SttStatus.kt</div><div class="fr">STT status enum</div></div><span class="ln">14</span></div>
+      </div>
+    </div>
+
+    <div class="pkg">
+      <div class="pkg-name">llm — language model</div>
+      <div class="files">
+        <div class="file"><div><div class="fn">LlmClient.kt</div><div class="fr">Contract + Event types + DEFAULT_SYSTEM_MESSAGE</div></div><span class="ln">47</span></div>
+        <div class="file"><div><div class="fn">LlmOrchestrator.kt</div><div class="fr">Engine selection (honors PipelineMode) + status</div></div><span class="ln">194</span></div>
+        <div class="file"><div><div class="fn">MediaPipeLlmEngine.kt</div><div class="fr">LiteRT LlmInference (streaming) — primary</div></div><span class="ln">213</span></div>
+        <div class="file"><div><div class="fn">MlKitLlmEngine.kt</div><div class="fr">Gemini Nano via ML Kit GenAI Prompt (AICore)</div></div><span class="ln">136</span></div>
+        <div class="file"><div><div class="fn">StubLlmEngine.kt</div><div class="fr">Canned fallback</div></div><span class="ln">55</span></div>
+        <div class="file"><div><div class="fn">PipelineMode.kt</div><div class="fr">AUTO / MEDIAPIPE / AICORE</div></div><span class="ln">21</span></div>
+        <div class="file"><div><div class="fn">GvpLlmModel.kt</div><div class="fr">LiteRT model catalog (LlmModelSpec + CATALOG)</div></div><span class="ln">114</span></div>
+        <div class="file"><div><div class="fn">ModelDownloader.kt</div><div class="fr">Atomic HTTP download (.part + rename) w/ progress</div></div><span class="ln">106</span></div>
+        <div class="file"><div><div class="fn">PromptBuilder.kt</div><div class="fr">Flatten system msg + history → single prompt</div></div><span class="ln">89</span></div>
+        <div class="file"><div><div class="fn">LlmStatus.kt</div><div class="fr">LLM status enum</div></div><span class="ln">14</span></div>
+      </div>
+    </div>
+
+    <div class="pkg">
+      <div class="pkg-name">tts · settings · util</div>
+      <div class="files">
+        <div class="file"><div><div class="fn">tts/AndroidTtsEngine.kt</div><div class="fr">Android TextToSpeech + audio focus</div></div><span class="ln">235</span></div>
+        <div class="file"><div><div class="fn">tts/TtsClient.kt</div><div class="fr">TTS contract</div></div><span class="ln">21</span></div>
+        <div class="file"><div><div class="fn">settings/GvpPrefs.kt</div><div class="fr">DataStore: theme, prompts, thresholds, model ids</div></div><span class="ln">100</span></div>
+        <div class="file"><div><div class="fn">util/SpeechSanitizer.kt</div><div class="fr">Strip markdown / newlines / emoji before TTS</div></div><span class="ln">32</span></div>
+        <div class="file"><div><div class="fn">util/StringUtils.kt</div><div class="fr">areSimilar() — Levenshtein near-duplicate filter</div></div><span class="ln">28</span></div>
+        <div class="file"><div><div class="fn">util/LatencyTracker.kt</div><div class="fr">Time-to-first-token</div></div><span class="ln">42</span></div>
+        <div class="file"><div><div class="fn">util/LlmStop.kt</div><div class="fr">LLM stop/cancel signaling helper</div></div><span class="ln">53</span></div>
+      </div>
+    </div>
+
+    <div class="pkg">
+      <div class="pkg-name">ui · service</div>
+      <div class="files">
+        <div class="file"><div><div class="fn">ui/SetupScreen.kt</div><div class="fr">LLM/STT provisioning cards + AICore status</div></div><span class="ln">248</span></div>
+        <div class="file"><div><div class="fn">ui/VoiceAgentScreen.kt</div><div class="fr">Live voice UI: partials, chips, speaker FAB</div></div><span class="ln">233</span></div>
+        <div class="file"><div><div class="fn">ui/SettingsScreen.kt</div><div class="fr">All settings surfaces</div></div><span class="ln">540</span></div>
+        <div class="file"><div><div class="fn">ui/AudioBlobVisualizer.kt</div><div class="fr">Audio-level blob visualizer</div></div><span class="ln">266</span></div>
+        <div class="file"><div><div class="fn">service/VoiceAgentService.kt</div><div class="fr">Foreground service (mic) during active sessions</div></div><span class="ln">83</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= DATA + SETTINGS ========================= -->
+<section id="data">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">05</span><h2>Data &amp; configuration</h2></div>
+    <p class="sec-sub">Room persists sessions, messages, and transcript chunks; DataStore holds preferences. Nothing leaves the device.</p>
+
+    <div class="grid g3">
+      <div class="card">
+        <span class="role">Room entity</span>
+        <h3>ChatSession</h3>
+        <p class="mono-cell" style="font-size:12px;color:var(--ink-soft)">id · title · createdAt</p>
+      </div>
+      <div class="card">
+        <span class="role">Room entity</span>
+        <h3>MessageItem</h3>
+        <p class="mono-cell" style="font-size:12px;color:var(--ink-soft)">messageId · sessionId · role · text · createdAt</p>
+      </div>
+      <div class="card">
+        <span class="role">Room entity</span>
+        <h3>TranscriptChunk</h3>
+        <p class="mono-cell" style="font-size:12px;color:var(--ink-soft)">id · sessionId · fromMs · toMs · text · isFinal</p>
+      </div>
+    </div>
+    <p class="sec-sub" style="margin:16px 0 30px">
+      DAOs: <span class="mono-cell">SessionDao · MessageDao · TranscriptDao</span>, fronted by
+      <span class="mono-cell">ConversationRepository</span>. Room schema is exported to <span class="mono-cell">app/schemas</span> via KSP.
+    </p>
+
+    <h3 style="font-family:var(--mono);font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--signal-ink);margin:0 0 12px">Settings surface · GvpPrefs (DataStore)</h3>
+    <div class="tbl-scroll">
+      <table>
+        <thead><tr><th>Setting</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td class="mono"><b>Theme</b></td><td>System / Light / Dark</td></tr>
+          <tr><td class="mono"><b>Inference pipeline</b></td><td>Auto / MediaPipe / AICore; shows the active-engine status</td></tr>
+          <tr><td class="mono"><b>Language model</b></td><td>Pick the LiteRT model; shows size + download state; disabled under AICore</td></tr>
+          <tr><td class="mono"><b>ML Kit GenAI STT</b></td><td>Experimental — swap Sherpa for ML Kit ASR; applies next session</td></tr>
+          <tr><td class="mono"><b>Hugging Face token</b></td><td>Appears for gated models (Gemma); authorizes the download</td></tr>
+          <tr><td class="mono"><b>System message</b></td><td>Persisted prompt prefix</td></tr>
+          <tr><td class="mono"><b>TTS mute / voice</b></td><td>Transcript-only mode; pick among installed system voices</td></tr>
+          <tr><td class="mono"><b>End-of-utterance silence</b></td><td>VAD silence threshold → STT finalization timing</td></tr>
+          <tr><td class="mono"><b>Mic sensitivity</b></td><td>Idle voiced-energy bar (raise if ambient noise self-triggers)</td></tr>
+          <tr><td class="mono"><b>Barge-in threshold</b></td><td>Bar applied during TTS, between AEC residual echo and the user's voice</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="grid g2" style="margin-top:26px">
+      <div class="card">
+        <span class="role">Manifest</span>
+        <h3>Permissions</h3>
+        <div class="chips" style="margin-top:12px">
+          <span class="chip">RECORD_AUDIO</span>
+          <span class="chip">INTERNET*</span>
+          <span class="chip">POST_NOTIFICATIONS</span>
+          <span class="chip">FOREGROUND_SERVICE</span>
+          <span class="chip">FGS_MICROPHONE</span>
+        </div>
+        <p style="font-size:.85rem">*INTERNET is used only for optional first-launch model download — never during the live pipeline.</p>
+      </div>
+      <div class="card">
+        <span class="role">Debugging · logcat</span>
+        <h3>Trace the loop</h3>
+        <div class="code" style="margin-top:12px"><span class="t">adb logcat -s</span> GVP.Pipeline GVP.VAD \
+  GVP.STT GVP.STT.MLKit GVP.LLM \
+  GVP.TTS GVP.BargeIn AudioCapture</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= LEARNED ========================= -->
+<section id="learned">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">06</span><h2>What we learned</h2></div>
+    <p class="sec-sub">The hard problems — the "what we learned" slides. On-device is not a uniform target; the accelerator is shared; and turn-taking is still the frontier.</p>
+
+    <div class="learn">
+      <h4>Device-specific audio capture</h4>
+      <dl>
+        <dt>Problem</dt><dd>The Pixel 10's VOICE_COMMUNICATION + AEC/NS/AGC chain delivered signal ~20–50× too quiet — loud speech peaked ~0.013 RMS against the 0.027 VAD bar, so there were <b>no transcripts at all</b>.</dd>
+        <dt>Fix</dt><dd>A fixed <b>8× software gain</b> stage in <span class="mono-cell">AudioCapture</span>, restoring usable levels for the VAD and recognizer.</dd>
+        <dt>Takeaway</dt><dd class="take">On-device audio isn't uniform across handsets; the gain is a per-device constant that may need retuning elsewhere.</dd>
+      </dl>
+    </div>
+    <div class="learn">
+      <h4>AICore contention</h4>
+      <dl>
+        <dt>Problem</dt><dd>Running ML Kit GenAI <b>Advanced</b> ASR and Gemini Nano simultaneously — both on AICore — starved each other; Nano slowed from ~2 s to &gt;6 s and replies got cancelled.</dd>
+        <dt>Fix</dt><dd>Prefer <b>Basic</b> (on-device SODA) STT, which doesn't contend with Nano; use Advanced only when the LLM is off AICore (<span class="mono-cell">PREFER_ADVANCED = false</span>).</dd>
+        <dt>Takeaway</dt><dd class="take">The on-device accelerator is a shared, finite resource — you schedule around it.</dd>
+      </dl>
+    </div>
+    <div class="learn">
+      <h4>Turn-taking is the frontier</h4>
+      <dl>
+        <dt>Problem</dt><dd>Today's VAD and barge-in are energy heuristics, not models — tuned thresholds, not understanding.</dd>
+        <dt>Fix</dt><dd>A fully-on-device, Deepgram-Flux-style path: neural VAD → eager endpointing → semantic end-of-turn. The retract plumbing (<span class="mono-cell">cancelResponse()</span> + <span class="mono-cell">llmJob.cancel()</span>) already exists.</dd>
+        <dt>Takeaway</dt><dd class="take">A credible on-device approximation of cloud-Flux quality is within reach in 2026.</dd>
+      </dl>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= ROADMAP ========================= -->
+<section id="roadmap">
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">07</span><h2>Roadmap</h2></div>
+    <p class="sec-sub">Toward model-based turn-taking, in rough order of leverage. The building blocks already ship — the app carries both the ONNX and LiteRT runtimes.</p>
+    <div class="road">
+      <div class="step"><h4><span class="p">01</span>Neural VAD</h4><p>Replace the energy <span class="mono-cell">SileroVad</span> with real Silero VAD ONNX (~2 MB, bundled with Sherpa) behind the same interface. Highest bang-for-buck.</p></div>
+      <div class="step"><h4><span class="p">02</span>Eager end-of-turn event model</h4><p>Flux-style eager → resume → commit: start the LLM on a medium-confidence endpoint and cancel if the user resumes. Architecture only, no new model.</p></div>
+      <div class="step"><h4><span class="p">03</span>Semantic end-of-turn</h4><p>Run an on-device turn model (e.g. Smart Turn v2/v3, Wav2Vec2-based) at candidate endpoints instead of the fixed 1.5 s silence timer. The actual Flux-like capability.</p></div>
+      <div class="step"><h4><span class="p">04</span>Reference-based AEC</h4><p>Feed the TTS PCM as the echo reference (e.g. WebRTC AEC3) for robust speakerphone barge-in on devices with worse hardware AEC than the Pixel 10.</p></div>
+      <div class="step"><h4><span class="p">05</span>Adaptive noise-floor threshold</h4><p>Track the noise floor so the capture gain and barge-in bar stop needing per-device constants.</p></div>
+      <div class="step"><h4><span class="p">06</span>Persistent KV-cache LLM session</h4><p>Keep a persistent MediaPipe session that retains the KV cache and feeds only the new user turn, flattening latency regardless of conversation depth.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ========================= STACK ========================= -->
+<section>
+  <div class="wrap">
+    <div class="sec-head"><span class="sec-num">08</span><h2>Tech stack</h2></div>
+    <div class="chips" style="margin-top:18px">
+      <span class="chip">Kotlin 2.2.0</span>
+      <span class="chip">Jetpack Compose · M3</span>
+      <span class="chip">Coroutines / Flow</span>
+      <span class="chip">Room (KSP)</span>
+      <span class="chip">DataStore</span>
+      <span class="chip">Navigation Compose</span>
+      <span class="chip">MediaPipe tasks-genai 0.10.27</span>
+      <span class="chip">ML Kit genai-prompt 1.0.0-beta2</span>
+      <span class="chip">ML Kit genai-speech-recognition 1.0.0-alpha1</span>
+      <span class="chip">Sherpa-ONNX 1.13.2 (vendored AAR)</span>
+      <span class="chip">AGP 8.6.1 · JDK 21</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>A full voice assistant — STT, a real LLM, and TTS — running entirely on a stock Android phone, offline, today.</div>
+    <div class="mono">GVP · com.m15.gvp · generated 2026-07-22</div>
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var btn = document.getElementById('themeBtn');
+    var root = document.documentElement;
+    btn.addEventListener('click', function () {
+      var cur = root.getAttribute('data-theme');
+      if (!cur) { cur = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; }
+      root.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+    });
+  })();
+</script>
