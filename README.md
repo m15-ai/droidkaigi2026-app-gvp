@@ -1,4 +1,11 @@
+<p align="center">
+  <img src="app/src/main/ic_launcher-playstore.png" alt="GVP app icon" width="128">
+</p>
+
 # GVP — Google Voice Pipeline
+
+> Part of the [DroidKaigi 2026 demo suite](https://github.com/m15-ai/droidkaigi2026) — see the
+> top-level repo for the session overview and the sibling demo apps.
 
 A fully **on-device** voice assistant for Android: you speak, your speech is transcribed locally,
 answered by an on-device LLM, and spoken back — **no cloud calls, works in airplane mode** once the
@@ -12,9 +19,8 @@ models are downloaded.
 
 ---
 
-## Conference Notes
+## Why fully on-device
 
-> Talking points for **"An All-Local Voice Assistant on Android"** — Tokyo, 2026.
 > Everything below runs on the phone. No server, no API key, no network — verified in **airplane mode**.
 
 **The thesis.** A complete conversational voice loop — *speech in → speech out* — with **zero cloud calls**.
@@ -47,7 +53,7 @@ the models are downloaded the phone can be fully offline.
   **Pixel 10 (Tensor G5)**.
 - **Multi-turn memory** with a rolling 5-exchange context window; transcripts persisted locally (Room).
 
-**The hard problems (good "what we learned" slide).**
+**The hard problems (what we learned).**
 - **Device-specific audio capture** — the Pixel 10's VOICE_COMMUNICATION + AEC/NS/AGC chain delivered
   signal ~20–50× too quiet (loud speech peaked ~0.013 RMS vs. the 0.027 VAD bar → *no transcripts at all*).
   Fixed with an 8× software gain stage. Takeaway: on-device audio is not uniform across handsets.
@@ -58,7 +64,7 @@ the models are downloaded the phone can be fully offline.
   fully-on-device, Deepgram-Flux-style *neural* turn model (neural VAD → eager endpointing → semantic
   end-of-turn). See [Status & roadmap](#status--roadmap).
 
-**One-line summary for the closing slide:** *A full voice assistant — STT, a real LLM, and TTS — running
+**One-line summary:** *A full voice assistant — STT, a real LLM, and TTS — running
 entirely on a stock Android phone, offline, today.*
 
 ---
