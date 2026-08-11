@@ -259,6 +259,19 @@ com.m15.gvp
 
 ---
 
+## System message
+
+The default system message (defined in `llm/LlmClient.kt` as `DEFAULT_SYSTEM_MESSAGE`):
+
+> *You are a helpful voice assistant running entirely on-device. Keep responses concise and conversational — they will be spoken aloud via TTS. Limit responses to 1-3 sentences unless the user asks for detail. Never use bullet points, numbered lists, markdown, emojis, or special formatting. Speak in plain, natural sentences like a real conversation.*
+
+Short, formatting-free replies matter doubly here: less text to synthesize keeps TTS latency down,
+and on a small on-device LLM the tight length limit also caps generation time. The message is
+user-editable — tap the preview card on the Setup screen to open the prompt editor; the value
+persists via DataStore (`GvpPrefs.systemMessage`) and is prepended to every turn by `PromptBuilder`.
+
+---
+
 ## Logging & debugging
 
 Tags: `GVP.Pipeline`, `GVP.VAD`, `GVP.STT`, `GVP.STT.MLKit`, `GVP.LLM`, `GVP.TTS`, `GVP.BargeIn`, `AudioCapture`.
