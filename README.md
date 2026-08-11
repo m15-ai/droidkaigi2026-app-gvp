@@ -53,17 +53,6 @@ the models are downloaded the phone can be fully offline.
   **Pixel 10 (Tensor G5)**.
 - **Multi-turn memory** with a rolling 5-exchange context window; transcripts persisted locally (Room).
 
-**The hard problems (what we learned).**
-- **Device-specific audio capture** — the Pixel 10's VOICE_COMMUNICATION + AEC/NS/AGC chain delivered
-  signal ~20–50× too quiet (loud speech peaked ~0.013 RMS vs. the 0.027 VAD bar → *no transcripts at all*).
-  Fixed with an 8× software gain stage. Takeaway: on-device audio is not uniform across handsets.
-- **AICore contention** — running ML Kit GenAI *Advanced* ASR and Gemini Nano *simultaneously* both hit
-  AICore and starve each other (Nano slowed ~2 s → >6 s). Lesson: the on-device accelerator is a shared,
-  finite resource — you schedule around it.
-- **Turn-taking is the frontier** — today's VAD/barge-in is energy-heuristic; the roadmap is a
-  fully-on-device, Deepgram-Flux-style *neural* turn model (neural VAD → eager endpointing → semantic
-  end-of-turn). See [Status & roadmap](#status--roadmap).
-
 **One-line summary:** *A full voice assistant — STT, a real LLM, and TTS — running
 entirely on a stock Android phone, offline, today.*
 
@@ -95,6 +84,14 @@ ASR) works but runs on AICore and **contends with the Gemini Nano LLM** (also AI
 badly — so Basic is preferred until the LLM runs off AICore (flip `PREFER_ADVANCED` in
 `MlKitGenAiSttEngine`). The ML Kit API is **alpha** — Sherpa stays the default/fallback. See
 [Device notes](#device-notes).
+
+**TTS is the stock Android engine.** `AndroidTtsEngine` uses the framework
+`android.speech.tts.TextToSpeech` API — no Gradle dependency, and the app ships **no voice data**.
+Voices come from whatever system TTS engine is installed (typically **Speech Services by Google**,
+package `com.google.android.tts`); the Settings voice picker just enumerates the engine's installed
+voices and persists your choice. For true airplane-mode operation the engine must have an **offline**
+English voice downloaded (system Settings → Text-to-speech output) — Android voices can be
+network-backed (`Voice.isNetworkConnectionRequired()`), and GVP does not currently filter those out.
 
 ---
 
