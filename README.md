@@ -19,6 +19,12 @@ models are downloaded.
 
 ---
 
+> GVP is one of three Android voice apps presented together at **DroidKaigi 2026**,
+> each exploring a different point in the design space:
+> - **[Cliff](https://github.com/m15-ai/droidkaigi2026-app-cliff)** — cloud streaming pipeline wired by hand (Deepgram + Claude + Deepgram), client owns the orchestration.
+> - **GVP** (this app) — fully **on-device**, no network: Sherpa-ONNX STT + MediaPipe LLM + Android TTS.
+> - **[Pica](https://github.com/m15-ai/droidkaigi2026-app-pipecat)** — **thin client over a Pipecat server**: the server owns the pipeline, the phone owns the audio.
+
 ## Why fully on-device
 
 > Everything below runs on the phone. No server, no API key, no network — verified in **airplane mode**.
